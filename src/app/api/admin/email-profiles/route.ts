@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { authOptions } from '@/lib/auth'
 import { NextRequest, NextResponse } from 'next/server'
 
+// 强制动态渲染，防止构建时尝试连接数据库
+export const dynamic = 'force-dynamic'
+
 // 获取系统管理员邮箱配置
 export async function GET(request: NextRequest) {
   try {
@@ -111,10 +114,10 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       profile,
-      message: '系统管理员邮箱配置创建成功' 
+      message: '系统管理员邮箱配置创建成功'
     })
   } catch (error) {
     console.error('创建系统管理员邮箱配置失败:', error)
@@ -192,10 +195,10 @@ export async function PUT(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       profile,
-      message: '系统管理员邮箱配置更新成功' 
+      message: '系统管理员邮箱配置更新成功'
     })
   } catch (error) {
     console.error('更新系统管理员邮箱配置失败:', error)
