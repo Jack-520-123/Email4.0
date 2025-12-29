@@ -2,46 +2,43 @@ import { prisma } from './prisma';
 import nodemailer from 'nodemailer';
 import { randomInt } from 'crypto';
 
-// 全局变量类型声明
-declare global {
-  var warmupRotationState: Map<string, any> | undefined;
-}
+
 
 interface WarmupPair {
-  from: {
-    id: string;
-    email: string;
-    password: string;
-    smtpServer: string;
-    smtpPort: number;
-  };
-  to: {
-    id: string;
-    email: string;
-  };
+    from: {
+        id: string;
+        email: string;
+        password: string;
+        smtpServer: string;
+        smtpPort: number;
+    };
+    to: {
+        id: string;
+        email: string;
+    };
 }
 
 const shuffleArray = <T>(array: T[]): T[] => {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
 };
 
 const DEFAULT_WARMUP_EMAILS: { subject: string; question: string; answer: string }[] = [
-  {
-      subject: 'Project Update',
-      question: 'Hi, could you provide an update on the project status?',
-      answer: 'Sure, we are on track with the timeline. I will send a detailed report by end of day.'
-  },
-  {
-      subject: 'Quick Question',
-      question: 'Do you have a minute to answer a quick question about the new feature?',
-      answer: 'Yes, I am available now. Feel free to ask.'
-  },
-  // Business Communication
+    {
+        subject: 'Project Update',
+        question: 'Hi, could you provide an update on the project status?',
+        answer: 'Sure, we are on track with the timeline. I will send a detailed report by end of day.'
+    },
+    {
+        subject: 'Quick Question',
+        question: 'Do you have a minute to answer a quick question about the new feature?',
+        answer: 'Yes, I am available now. Feel free to ask.'
+    },
+    // Business Communication
     {
         subject: 'Quarterly Review Meeting',
         question: 'When would be a good time to schedule our quarterly review meeting?',
@@ -393,7 +390,7 @@ const DEFAULT_WARMUP_EMAILS: { subject: string; question: string; answer: string
         subject: 'Stargazing',
         question: 'The sky is so clear tonight. Perfect for stargazing.',
         answer: 'Indeed. It is amazing to think about how vast the universe is.'
-     },
+    },
 
     // Movies & TV Shows
     {
@@ -1417,191 +1414,309 @@ const DEFAULT_WARMUP_EMAILS: { subject: string; question: string; answer: string
 ];
 
 export async function initializeWarmupEmails() {
-  const existingEmails = await prisma.warmupEmail.count();
-  if (existingEmails === 0) {
-    const shuffledEmails = shuffleArray(DEFAULT_WARMUP_EMAILS);
-    const emailsToCreate = shuffledEmails.map(email => ({
-      subject: email.subject,
-      body: `${email.question}\n\n${email.answer}`
-    }));
-    await prisma.warmupEmail.createMany({
-      data: emailsToCreate
-    });
-  }
+    const existingEmails = await prisma.warmupEmail.count();
+    if (existingEmails === 0) {
+        const shuffledEmails = shuffleArray(DEFAULT_WARMUP_EMAILS);
+        const emailsToCreate = shuffledEmails.map(email => ({
+            subject: email.subject,
+            body: `${email.question}\n\n${email.answer}`
+        }));
+        await prisma.warmupEmail.createMany({
+            data: emailsToCreate
+        });
+    }
 }
 
-const usedEmailIndices = new Set<number>();
+interface WarmupMetadata {
+    pairs: { fromIndex: number; toIndex: number }[];
+    currentIndex: number;
+    totalPairs: number;
+    usedEmailIndices: number[];
+}
+
+function initWarmupMetadata(count: number): WarmupMetadata {
+    const pairs: { fromIndex: number, toIndex: number }[] = [];
+    for (let i = 0; i < count; i++) {
+        for (let j = 0; j < count; j++) {
+            if (i !== j) pairs.push({ fromIndex: i, toIndex: j });
+        }
+    }
+    return {
+        pairs: shuffleArray(pairs),
+        currentIndex: 0,
+        totalPairs: pairs.length * (pairs.length > 0 ? 1 : 0), // Safety
+        usedEmailIndices: []
+    };
+}
+
+export async function processWarmupCampaign(campaignId: string) {
+    try {
+        const campaign = await prisma.warmupCampaign.findUnique({
+            where: { id: campaignId },
+            include: { emailProfiles: true }
+        });
+
+        if (!campaign || campaign.status !== 'active') return;
+
+        // Check if it's time to run (Stateless Scheduling)
+        if (campaign.nextRunAt && new Date(campaign.nextRunAt) > new Date()) {
+            return;
+        }
+
+        const emailProfiles = campaign.emailProfiles;
+        if (emailProfiles.length < 2) {
+            console.error(`[Warmup] Campaign ${campaignId} needs at least 2 email profiles`);
+            return;
+        }
+
+        // Initialize or load metadata state
+        let metadata: WarmupMetadata;
+        if (campaign.metadata) {
+            metadata = campaign.metadata as any;
+            if (!metadata.pairs || !metadata.usedEmailIndices) {
+                metadata = initWarmupMetadata(emailProfiles.length);
+            }
+        } else {
+            metadata = initWarmupMetadata(emailProfiles.length);
+        }
+
+        // Rotation Logic
+        if (metadata.pairs.length === 0) {
+            metadata = initWarmupMetadata(emailProfiles.length);
+        }
+
+        if (metadata.currentIndex >= metadata.pairs.length) {
+            metadata.pairs = shuffleArray(metadata.pairs);
+            metadata.currentIndex = 0;
+            console.log(`[Warmup] Campaign ${campaignId} starting new rotation cycle`);
+        }
+
+        const currentPairIndices = metadata.pairs[metadata.currentIndex];
+        metadata.currentIndex++;
+
+        if (currentPairIndices) {
+            const fromProfile = emailProfiles[currentPairIndices.fromIndex];
+            const toProfile = emailProfiles[currentPairIndices.toIndex];
+
+            if (fromProfile && toProfile) {
+                const pair: WarmupPair = { from: fromProfile, to: toProfile };
+                console.log(`[Warmup] Processing ${fromProfile.email} -> ${toProfile.email}`);
+
+                // Content Logic
+                const warmupEmails = await prisma.warmupEmail.findMany();
+                if (warmupEmails.length > 0) {
+                    let availableIndices = warmupEmails.map((_, idx) => idx)
+                        .filter(idx => !metadata.usedEmailIndices.includes(idx));
+
+                    if (availableIndices.length === 0) {
+                        metadata.usedEmailIndices = [];
+                        availableIndices = warmupEmails.map((_, idx) => idx);
+                    }
+
+                    const randomIdx = Math.floor(Math.random() * availableIndices.length);
+                    const emailIndex = availableIndices[randomIdx];
+                    const randomEmail = warmupEmails[emailIndex];
+
+                    if (randomEmail) {
+                        metadata.usedEmailIndices.push(emailIndex);
+                        // Send Email
+                        await sendWarmupEmail(campaign.id, pair, randomEmail);
+                    }
+                }
+            }
+        }
+
+        // Schedule Next Run
+        // crypto.randomInt max is exclusive, so +1
+        const minDelay = campaign.minSendDelay || 2;
+        const maxDelay = campaign.maxSendDelay || 30;
+        const nextDelayMinutes = randomInt(minDelay, maxDelay + 1);
+        const nextRunAt = new Date(Date.now() + nextDelayMinutes * 60 * 1000);
+
+        // Save State
+        await prisma.warmupCampaign.update({
+            where: { id: campaignId },
+            data: {
+                metadata: metadata as any,
+                nextRunAt: nextRunAt
+            }
+        });
+
+    } catch (error) {
+        console.error('Failed to process warmup campaign:', error);
+    }
+}
 
 const getUniqueRandomEmailIndex = (max: number) => {
-  if (usedEmailIndices.size >= max) {
-    usedEmailIndices.clear(); // Reset if all emails have been used
-  }
+    if (usedEmailIndices.size >= max) {
+        usedEmailIndices.clear(); // Reset if all emails have been used
+    }
 
-  let index;
-  do {
-    index = Math.floor(Math.random() * max);
-  } while (usedEmailIndices.has(index));
+    let index;
+    do {
+        index = Math.floor(Math.random() * max);
+    } while (usedEmailIndices.has(index));
 
-  usedEmailIndices.add(index);
-  return index;
+    usedEmailIndices.add(index);
+    return index;
 };
 
 // 全局轮询状态管理
 if (!global.warmupRotationState) {
-  global.warmupRotationState = new Map();
+    global.warmupRotationState = new Map();
 }
 
 const warmupRotationState = global.warmupRotationState;
 
 // 初始化或获取轮询状态
 function getRotationState(campaignId: string, emailProfiles: any[]) {
-  if (!warmupRotationState.has(campaignId)) {
-    // 创建所有可能的发送对组合
-    const pairs: Array<{fromIndex: number, toIndex: number}> = [];
-    for (let i = 0; i < emailProfiles.length; i++) {
-      for (let j = 0; j < emailProfiles.length; j++) {
-        if (i !== j) {
-          pairs.push({ fromIndex: i, toIndex: j });
+    if (!warmupRotationState.has(campaignId)) {
+        // 创建所有可能的发送对组合
+        const pairs: Array<{ fromIndex: number, toIndex: number }> = [];
+        for (let i = 0; i < emailProfiles.length; i++) {
+            for (let j = 0; j < emailProfiles.length; j++) {
+                if (i !== j) {
+                    pairs.push({ fromIndex: i, toIndex: j });
+                }
+            }
         }
-      }
+
+        // 打乱顺序以增加随机性
+        const shuffledPairs = shuffleArray(pairs);
+
+        warmupRotationState.set(campaignId, {
+            pairs: shuffledPairs,
+            currentIndex: 0,
+            totalPairs: shuffledPairs.length
+        });
+
+        console.log(`[Warmup] 为活动 ${campaignId} 创建了 ${shuffledPairs.length} 个发送对`);
     }
-    
-    // 打乱顺序以增加随机性
-    const shuffledPairs = shuffleArray(pairs);
-    
-    warmupRotationState.set(campaignId, {
-      pairs: shuffledPairs,
-      currentIndex: 0,
-      totalPairs: shuffledPairs.length
-    });
-    
-    console.log(`[Warmup] 为活动 ${campaignId} 创建了 ${shuffledPairs.length} 个发送对`);
-  }
-  
-  return warmupRotationState.get(campaignId);
+
+    return warmupRotationState.get(campaignId);
 }
 
 // 获取下一个发送对
 function getNextWarmupPair(campaignId: string, emailProfiles: any[]): WarmupPair | null {
-  const state = getRotationState(campaignId, emailProfiles);
-  
-  if (state.currentIndex >= state.totalPairs) {
-    // 一轮完成，重新开始
-    state.currentIndex = 0;
-    // 重新打乱顺序
-    state.pairs = shuffleArray(state.pairs);
-    console.log(`[Warmup] 活动 ${campaignId} 完成一轮互相发送，开始新一轮`);
-  }
-  
-  const currentPair = state.pairs[state.currentIndex];
-  state.currentIndex++;
-  
-  const fromProfile = emailProfiles[currentPair.fromIndex];
-  const toProfile = emailProfiles[currentPair.toIndex];
-  
-  console.log(`[Warmup] 轮询发送 (${state.currentIndex}/${state.totalPairs}): ${fromProfile.email} -> ${toProfile.email}`);
-  
-  return {
-    from: fromProfile,
-    to: toProfile
-  };
+    const state = getRotationState(campaignId, emailProfiles);
+
+    if (state.currentIndex >= state.totalPairs) {
+        // 一轮完成，重新开始
+        state.currentIndex = 0;
+        // 重新打乱顺序
+        state.pairs = shuffleArray(state.pairs);
+        console.log(`[Warmup] 活动 ${campaignId} 完成一轮互相发送，开始新一轮`);
+    }
+
+    const currentPair = state.pairs[state.currentIndex];
+    state.currentIndex++;
+
+    const fromProfile = emailProfiles[currentPair.fromIndex];
+    const toProfile = emailProfiles[currentPair.toIndex];
+
+    console.log(`[Warmup] 轮询发送 (${state.currentIndex}/${state.totalPairs}): ${fromProfile.email} -> ${toProfile.email}`);
+
+    return {
+        from: fromProfile,
+        to: toProfile
+    };
 }
 
 export async function processWarmupCampaign(campaignId: string) {
-  try {
-    const campaign = await prisma.warmupCampaign.findUnique({
-      where: { id: campaignId },
-      include: { emailProfiles: true }
-    });
+    try {
+        const campaign = await prisma.warmupCampaign.findUnique({
+            where: { id: campaignId },
+            include: { emailProfiles: true }
+        });
 
-    if (!campaign || campaign.status !== 'active') {
-      // 清理轮询状态
-      warmupRotationState.delete(campaignId);
-      return;
+        if (!campaign || campaign.status !== 'active') {
+            // 清理轮询状态
+            warmupRotationState.delete(campaignId);
+            return;
+        }
+
+        const emailProfiles = campaign.emailProfiles;
+        if (emailProfiles.length < 2) {
+            console.error(`[Warmup] 活动 ${campaignId} 邮箱数量不足，需要至少2个邮箱`);
+            return;
+        }
+
+        // 获取下一个发送对（轮询方式）
+        const warmupPair = getNextWarmupPair(campaignId, emailProfiles);
+        if (!warmupPair) {
+            console.error(`[Warmup] 无法获取发送对`);
+            return;
+        }
+
+        // 随机选择一个预设邮件内容
+        const warmupEmails = await prisma.warmupEmail.findMany();
+        const emailIndex = getUniqueRandomEmailIndex(warmupEmails.length);
+        const randomEmail = warmupEmails[emailIndex];
+
+        // 发送预热邮件
+        await sendWarmupEmail(campaign.id, warmupPair, randomEmail);
+
+        // 设置下一次发送的时间
+        const nextDelay = randomInt(campaign.minSendDelay * 60000, campaign.maxSendDelay * 60000);
+        setTimeout(() => processWarmupCampaign(campaignId), nextDelay);
+
+    } catch (error) {
+        console.error('处理预热活动失败:', error);
+        // 发生错误时清理轮询状态
+        warmupRotationState.delete(campaignId);
     }
-
-    const emailProfiles = campaign.emailProfiles;
-    if (emailProfiles.length < 2) {
-      console.error(`[Warmup] 活动 ${campaignId} 邮箱数量不足，需要至少2个邮箱`);
-      return;
-    }
-
-    // 获取下一个发送对（轮询方式）
-    const warmupPair = getNextWarmupPair(campaignId, emailProfiles);
-    if (!warmupPair) {
-      console.error(`[Warmup] 无法获取发送对`);
-      return;
-    }
-
-    // 随机选择一个预设邮件内容
-    const warmupEmails = await prisma.warmupEmail.findMany();
-    const emailIndex = getUniqueRandomEmailIndex(warmupEmails.length);
-    const randomEmail = warmupEmails[emailIndex];
-
-    // 发送预热邮件
-    await sendWarmupEmail(campaign.id, warmupPair, randomEmail);
-
-    // 设置下一次发送的时间
-    const nextDelay = randomInt(campaign.minSendDelay * 60000, campaign.maxSendDelay * 60000);
-    setTimeout(() => processWarmupCampaign(campaignId), nextDelay);
-
-  } catch (error) {
-    console.error('处理预热活动失败:', error);
-    // 发生错误时清理轮询状态
-    warmupRotationState.delete(campaignId);
-  }
 }
 
 async function sendWarmupEmail(
-  campaignId: string,
-  pair: WarmupPair,
-  content: { subject: string; body: string }
+    campaignId: string,
+    pair: WarmupPair,
+    content: { subject: string; body: string }
 ) {
-  const transportOptions: any = {
-    host: pair.from.smtpServer,
-    port: pair.from.smtpPort,
-    secure: pair.from.smtpPort === 465,
-    auth: {
-      user: pair.from.email,
-      pass: pair.from.password
+    const transportOptions: any = {
+        host: pair.from.smtpServer,
+        port: pair.from.smtpPort,
+        secure: pair.from.smtpPort === 465,
+        auth: {
+            user: pair.from.email,
+            pass: pair.from.password
+        }
+    };
+    const transporter = nodemailer.createTransport(transportOptions);
+
+    try {
+        await transporter.sendMail({
+            from: pair.from.email,
+            to: pair.to.email,
+            subject: content.subject,
+            text: content.body
+        });
+
+        // 记录发送日志
+        await prisma.warmupLog.create({
+            data: {
+                warmupCampaignId: campaignId,
+                fromEmail: pair.from.email,
+                toEmail: pair.to.email,
+                subject: content.subject,
+                body: content.body,
+                status: 'success'
+            }
+        });
+
+    } catch (error) {
+        // 记录错误日志
+        await prisma.warmupLog.create({
+            data: {
+                warmupCampaignId: campaignId,
+                fromEmail: pair.from.email,
+                toEmail: pair.to.email,
+                subject: content.subject,
+                body: content.body,
+                status: 'failed',
+                error: error instanceof Error ? error.message : String(error)
+            }
+        });
+
+        throw error;
     }
-  };
-  const transporter = nodemailer.createTransport(transportOptions);
-
-  try {
-    await transporter.sendMail({
-      from: pair.from.email,
-      to: pair.to.email,
-      subject: content.subject,
-      text: content.body
-    });
-
-    // 记录发送日志
-    await prisma.warmupLog.create({
-      data: {
-        warmupCampaignId: campaignId,
-        fromEmail: pair.from.email,
-        toEmail: pair.to.email,
-        subject: content.subject,
-        body: content.body,
-        status: 'success'
-      }
-    });
-
-  } catch (error) {
-    // 记录错误日志
-    await prisma.warmupLog.create({
-      data: {
-        warmupCampaignId: campaignId,
-        fromEmail: pair.from.email,
-        toEmail: pair.to.email,
-        subject: content.subject,
-        body: content.body,
-        status: 'failed',
-        error: error instanceof Error ? error.message : String(error)
-      }
-    });
-
-    throw error;
-  }
 }

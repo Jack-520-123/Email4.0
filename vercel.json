@@ -5,6 +5,12 @@
       "maxDuration": 60
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/warmup",
+      "schedule": "* * * * *"
+    }
+  ],
   "env": {
     "SKIP_ENV_VALIDATION": "1"
   },
