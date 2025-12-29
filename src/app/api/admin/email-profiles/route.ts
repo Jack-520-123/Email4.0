@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // 强制动态渲染，防止构建时尝试连接数据库
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // 获取系统管理员邮箱配置
 export async function GET(request: NextRequest) {
