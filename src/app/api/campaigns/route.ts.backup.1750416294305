@@ -1,0 +1,209 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import * as XLSX from 'xlsx'
+import nodemailer from 'nodemailer'
+
+// 创建发送活动
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: '未授权' }, { status: 401 })
+    }
+
+    const { 
+      name, 
+      templateId, 
+      emailProfileId, 
+      scheduledAt,
+      recipientSource,
+      recipientListId,
+      excelUploadId,
+      sendFrequency,
+      sendInterval,
+      enableRandomInterval,
+      randomIntervalMin,
+      randomIntervalMax,
+      enableTimeLimit,
+      sendStartTime,
+      sendEndTime
+    } = await request.json()
+
+    if (!name || !templateId || !emailProfileId) {
+      return NextResponse.json({ 
+        error: '请填写活动名称、选择模板和发件人' 
+      }, { status: 400 })
+    }
+    
+    if (!recipientSource || (recipientSource === 'recipientList' && !recipientListId) || (recipientSource === 'excelUpload' && !excelUploadId)) {
+      return NextResponse.json({ 
+        error: '请选择收件人数据源' 
+      }, { status: 400 })
+    }
+
+    // 验证模板和邮件配置是否属于当前用户
+    const template = await prisma.template.findFirst({
+      where: { id: templateId, userId: session.user.id }
+    })
+    
+    const emailProfile = await prisma.emailProfile.findFirst({
+      where: { id: emailProfileId, userId: session.user.id }
+    })
+
+    if (!template || !emailProfile) {
+      return NextResponse.json({ 
+        error: '模板或发件人配置不存在' 
+      }, { status: 400 })
+    }
+
+    let totalRecipients = 0
+    
+    // 根据数据源类型计算收件人数量
+    if (recipientSource === 'excelUpload' && excelUploadId) {
+      const excelUpload = await prisma.excelUpload.findFirst({
+        where: { id: excelUploadId, userId: session.user.id }
+      })
+      
+      if (!excelUpload) {
+        return NextResponse.json({ 
+          error: 'Excel文件不存在' 
+        }, { status: 400 })
+      }
+      
+      totalRecipients = excelUpload.totalRecords
+    } else if (recipientSource === 'recipientList' && recipientListId) {
+      const recipientList = await prisma.recipientList.findFirst({
+        where: { id: recipientListId, userId: session.user.id },
+        include: {
+          _count: {
+            select: { recipients: true }
+          }
+        }
+      })
+      
+      if (!recipientList) {
+        return NextResponse.json({ 
+          error: '收件人列表不存在' 
+        }, { status: 400 })
+      }
+      
+      totalRecipients = recipientList._count.recipients
+    }
+
+    // 创建活动
+    const campaign = await prisma.campaign.create({
+      data: {
+        userId: session.user.id,
+        name,
+        templateId,
+        emailProfileId,
+        excelUploadId: recipientSource === 'excelUpload' ? excelUploadId : null,
+        recipientListId: recipientSource === 'recipientList' ? recipientListId : null,
+        totalRecipients,
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        sendFrequency: sendFrequency || 1,
+        sendInterval: sendInterval || 60,
+        enableRandomInterval: enableRandomInterval || false,
+        randomIntervalMin: randomIntervalMin || 60,
+        randomIntervalMax: randomIntervalMax || 120,
+        enableTimeLimit: enableTimeLimit || false,
+        sendStartTime: sendStartTime || null,
+        sendEndTime: sendEndTime || null,
+        isPaused: false,
+        status: 'DRAFT'
+      },
+      include: {
+        template: true,
+        emailProfile: true,
+        excelUpload: true,
+        recipientList: true
+      }
+    })
+
+    return NextResponse.json({ 
+      success: true, 
+      campaign 
+    })
+
+  } catch (error) {
+    console.error('创建活动错误:', error)
+    return NextResponse.json({ 
+      error: '创建活动失败' 
+    }, { status: 500 })
+  }
+}
+
+// 获取活动列表
+export async function GET(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: '未授权' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const status = searchParams.get('status')
+
+    const where: any = {
+      userId: session.user.id
+    }
+
+    if (status) {
+      where.status = status
+    }
+
+    const campaigns = await prisma.campaign.findMany({
+      where,
+      include: {
+        template: {
+          select: {
+            id: true,
+            name: true,
+            subject: true
+          }
+        },
+        emailProfile: {
+          select: {
+            id: true,
+            nickname: true,
+            email: true
+          }
+        },
+        excelUpload: {
+          select: {
+            id: true,
+            originalName: true,
+            totalRecords: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      skip: (page - 1) * limit,
+      take: limit
+    })
+
+    const total = await prisma.campaign.count({ where })
+
+    return NextResponse.json({
+      campaigns,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    })
+
+  } catch (error) {
+    console.error('获取活动列表错误:', error)
+    return NextResponse.json({ 
+      error: '获取数据失败' 
+    }, { status: 500 })
+  }
+}

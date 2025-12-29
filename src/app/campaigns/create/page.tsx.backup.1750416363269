@@ -1,0 +1,705 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav'
+
+interface Template {
+  id: string
+  name: string
+  subject: string
+  htmlContent: string
+  content?: string // 兼容性字段
+  isRichText: boolean
+}
+
+interface EmailProfile {
+  id: string
+  nickname: string
+  email: string
+  smtpServer: string
+  smtpPort: number
+}
+
+interface ExcelUpload {
+  id: string
+  originalName: string
+  totalRecords: number
+}
+
+interface RecipientList {
+  id: string
+  name: string
+  description?: string
+  _count: {
+    recipients: number
+  }
+}
+
+export default function CreateCampaignPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const excelId = searchParams.get('excelId')
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    templateId: '',
+    emailProfileId: '',
+    excelUploadId: excelId || '',
+    recipientListId: '',
+    recipientSource: 'recipientList', // 'recipientList' 或 'excelUpload'
+    scheduledAt: '',
+    // 发送配置
+    sendFrequency: 1,
+    sendInterval: 60,
+    enableRandomInterval: false,
+    randomIntervalMin: 60,
+    randomIntervalMax: 120,
+    sendStartTime: '09:00',
+    sendEndTime: '18:00',
+    enableTimeLimit: false
+  })
+  
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [emailProfiles, setEmailProfiles] = useState<EmailProfile[]>([])
+  const [excelUploads, setExcelUploads] = useState<ExcelUpload[]>([])
+  const [recipientLists, setRecipientLists] = useState<RecipientList[]>([])
+  const [loading, setLoading] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{success: boolean, message: string} | null>(null)
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login')
+    } else if (status === 'authenticated') {
+      fetchData()
+    }
+  }, [status, router])
+
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      
+      // 获取模板列表
+      const templatesResponse = await fetch('/api/templates')
+      const templatesData = await templatesResponse.json()
+      if (templatesData.templates) {
+        setTemplates(templatesData.templates)
+      }
+      
+      // 获取邮件配置列表
+      const profilesResponse = await fetch('/api/email-profiles')
+      const profilesData = await profilesResponse.json()
+      if (profilesData.profiles) {
+        setEmailProfiles(profilesData.profiles)
+      }
+      
+      // 获取Excel上传列表
+      const uploadsResponse = await fetch('/api/excel-upload')
+      const uploadsData = await uploadsResponse.json()
+      if (uploadsData.uploads) {
+        setExcelUploads(uploadsData.uploads)
+      }
+      
+      // 获取收件人列表
+      const recipientListsResponse = await fetch('/api/recipient-lists')
+      const recipientListsData = await recipientListsResponse.json()
+      if (recipientListsData.lists) {
+        setRecipientLists(recipientListsData.lists)
+      }
+      
+    } catch (error) {
+      console.error('获取数据失败:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 邮箱连通性测试
+  const testEmailConnection = async () => {
+    if (!formData.emailProfileId) {
+      setTestResult({ success: false, message: '请先选择发件人配置' })
+      return
+    }
+
+    setTesting(true)
+    setTestResult(null)
+
+    try {
+      const response = await fetch('/api/email-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          emailProfileId: formData.emailProfileId
+        })
+      })
+
+      const data = await response.json()
+      
+      if (response.ok) {
+        setTestResult({ success: true, message: data.message || '邮箱连接测试成功！' })
+      } else {
+        let errorMessage = data.error || '邮箱连接测试失败'
+        
+        // 如果有建议，添加到错误信息中
+        if (data.suggestions && data.suggestions.length > 0) {
+          errorMessage += '\n\n解决建议：\n' + data.suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')
+        }
+        
+        // 如果有详细错误信息，添加到错误信息中
+        if (data.details && data.details.code) {
+          errorMessage += `\n\n错误代码：${data.details.code}`
+        }
+        
+        setTestResult({ success: false, message: errorMessage })
+      }
+    } catch (error) {
+      console.error('测试邮箱连接失败:', error)
+      setTestResult({ success: false, message: '网络错误，请稍后重试' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!formData.name || !formData.templateId || !formData.emailProfileId) {
+      alert('请填写活动名称、选择模板和发件人')
+      return
+    }
+    
+    if (formData.recipientSource === 'recipientList' && !formData.recipientListId) {
+      alert('请选择收件人列表')
+      return
+    }
+    
+    if (formData.recipientSource === 'excelUpload' && !formData.excelUploadId) {
+      alert('请选择Excel文件')
+      return
+    }
+
+    try {
+      setCreating(true)
+      
+      const response = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('活动创建成功！')
+        router.push('/campaigns')
+      } else {
+        alert(data.error || '创建失败')
+      }
+    } catch (error) {
+      console.error('创建活动失败:', error)
+      alert('创建失败，请重试')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  const selectedTemplate = templates.find(t => t.id === formData.templateId)
+  const selectedExcelUpload = excelUploads.find(u => u.id === formData.excelUploadId)
+  const selectedRecipientList = recipientLists.find(r => r.id === formData.recipientListId)
+
+  if (status === 'loading' || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+          <div className="text-lg">加载中...</div>
+        </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* 面包屑导航 */}
+        <BreadcrumbNav 
+          title="创建发送活动"
+          customBackPath="/campaigns"
+        />
+        
+        {/* 页面描述 */}
+        <div className="mb-8">
+          <p className="text-gray-600">配置邮件发送活动的基本信息</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* 基本信息 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold mb-4">基本信息</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  活动名称 *
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入活动名称"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  计划发送时间
+                </label>
+                <input
+                  type="datetime-local"
+                  name="scheduledAt"
+                  value={formData.scheduledAt}
+                  onChange={handleInputChange}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">留空表示立即发送</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 邮件模板 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold mb-4">邮件模板</h2>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                选择模板 *
+              </label>
+              <select
+                name="templateId"
+                value={formData.templateId}
+                onChange={handleInputChange}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">请选择邮件模板</option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} - {template.subject}
+                  </option>
+                ))}
+              </select>
+              
+              {templates.length === 0 && (
+                <p className="text-sm text-red-600 mt-2">
+                  暂无可用模板，请先
+                  <a href="/templates/create" className="text-blue-600 hover:underline ml-1">
+                    创建模板
+                  </a>
+                </p>
+              )}
+            </div>
+            
+            {/* 模板预览 */}
+            {selectedTemplate && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">模板预览</h3>
+                <div className="text-sm text-gray-600">
+                  <div><strong>主题:</strong> {selectedTemplate.subject}</div>
+                  <div className="mt-2">
+                    <strong>内容:</strong>
+                    <div className="mt-1 p-2 bg-white border rounded text-xs max-h-32 overflow-y-auto">
+                      {selectedTemplate.isRichText ? (
+                        <div dangerouslySetInnerHTML={{ __html: selectedTemplate.htmlContent }} />
+                      ) : (
+                        <pre className="whitespace-pre-wrap">{selectedTemplate.htmlContent}</pre>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 发件人配置 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold mb-4">发件人配置</h2>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                选择发件人 *
+              </label>
+              <select
+                name="emailProfileId"
+                value={formData.emailProfileId}
+                onChange={handleInputChange}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">请选择发件人</option>
+                {emailProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.nickname} ({profile.email})
+                  </option>
+                ))}
+              </select>
+              
+              {emailProfiles.length === 0 && (
+                <p className="text-sm text-red-600 mt-2">
+                  暂无可用发件人，请先
+                  <a href="/email-profiles/create" className="text-blue-600 hover:underline ml-1">
+                    添加发件人
+                  </a>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 收件人数据源 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold mb-4">收件人数据源</h2>
+            
+            {/* 数据源类型选择 */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                选择数据源类型
+              </label>
+              <div className="flex space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="recipientSource"
+                    value="recipientList"
+                    checked={formData.recipientSource === 'recipientList'}
+                    onChange={handleInputChange}
+                    className="mr-2"
+                  />
+                  收件人列表
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="recipientSource"
+                    value="excelUpload"
+                    checked={formData.recipientSource === 'excelUpload'}
+                    onChange={handleInputChange}
+                    className="mr-2"
+                  />
+                  Excel文件
+                </label>
+              </div>
+            </div>
+            
+            {/* 收件人列表选择 */}
+            {formData.recipientSource === 'recipientList' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  选择收件人列表 *
+                </label>
+                <select
+                  name="recipientListId"
+                  value={formData.recipientListId}
+                  onChange={handleInputChange}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">请选择收件人列表</option>
+                  {recipientLists.map((list) => (
+                    <option key={list.id} value={list.id}>
+                      {list.name} ({list._count.recipients} 个收件人)
+                    </option>
+                  ))}
+                </select>
+                
+                {recipientLists.length === 0 && (
+                  <p className="text-sm text-red-600 mt-2">
+                    暂无可用收件人列表，请先
+                    <a href="/recipients" className="text-blue-600 hover:underline ml-1">
+                      导入收件人
+                    </a>
+                  </p>
+                )}
+                
+                {/* 收件人列表信息 */}
+                {selectedRecipientList && (
+                  <div className="mt-4 p-4 bg-green-50 rounded-lg">
+                    <h3 className="text-sm font-medium text-green-900 mb-2">收件人列表信息</h3>
+                    <div className="text-sm text-green-700">
+                      <div><strong>列表名称:</strong> {selectedRecipientList.name}</div>
+                      {selectedRecipientList.description && (
+                        <div><strong>描述:</strong> {selectedRecipientList.description}</div>
+                      )}
+                      <div><strong>收件人数量:</strong> {selectedRecipientList._count.recipients} 个</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Excel文件选择 */}
+            {formData.recipientSource === 'excelUpload' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  选择Excel文件 *
+                </label>
+                <select
+                  name="excelUploadId"
+                  value={formData.excelUploadId}
+                  onChange={handleInputChange}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">请选择Excel文件</option>
+                  {excelUploads.map((upload) => (
+                    <option key={upload.id} value={upload.id}>
+                      {upload.originalName} ({upload.totalRecords} 条记录)
+                    </option>
+                  ))}
+                </select>
+                
+                {excelUploads.length === 0 && (
+                  <p className="text-sm text-red-600 mt-2">
+                    暂无可用Excel文件，请先
+                    <a href="/excel-upload" className="text-blue-600 hover:underline ml-1">
+                      上传Excel文件
+                    </a>
+                  </p>
+                )}
+                
+                {/* Excel文件信息 */}
+                {selectedExcelUpload && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                    <h3 className="text-sm font-medium text-blue-900 mb-2">Excel文件信息</h3>
+                    <div className="text-sm text-blue-700">
+                      <div><strong>文件名:</strong> {selectedExcelUpload.originalName}</div>
+                      <div><strong>记录数:</strong> {selectedExcelUpload.totalRecords} 条</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 发送配置 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold mb-4">发送配置</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 发送频次 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  每批发送数量
+                </label>
+                <input
+                  type="number"
+                  name="sendFrequency"
+                  value={formData.sendFrequency}
+                  onChange={handleInputChange}
+                  min="1"
+                  max="1000"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="每批发送邮件数量"
+                />
+                <p className="text-xs text-gray-500 mt-1">默认为1，可根据需要调整，避免被邮件服务商限制</p>
+              </div>
+              
+              {/* 随机间隔开关 */}
+              <div>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    name="enableRandomInterval"
+                    checked={formData.enableRandomInterval}
+                    onChange={(e) => setFormData(prev => ({ ...prev, enableRandomInterval: e.target.checked }))}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">启用随机间隔时间</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1">启用后将在指定范围内随机选择间隔时间</p>
+              </div>
+            </div>
+            
+            {/* 间隔时间配置 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              {formData.enableRandomInterval ? (
+                <>
+                  {/* 随机间隔最小值 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      随机间隔最小值（秒）
+                    </label>
+                    <input
+                      type="number"
+                      name="randomIntervalMin"
+                      value={formData.randomIntervalMin}
+                      onChange={handleInputChange}
+                      min="10"
+                      max="3600"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="最小间隔时间"
+                    />
+                  </div>
+                  
+                  {/* 随机间隔最大值 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      随机间隔最大值（秒）
+                    </label>
+                    <input
+                      type="number"
+                      name="randomIntervalMax"
+                      value={formData.randomIntervalMax}
+                      onChange={handleInputChange}
+                      min="10"
+                      max="3600"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="最大间隔时间"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">系统将在此范围内随机选择间隔时间</p>
+                  </div>
+                </>
+              ) : (
+                /* 固定发送间隔 */
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    发送间隔（秒）
+                  </label>
+                  <input
+                    type="number"
+                    name="sendInterval"
+                    value={formData.sendInterval}
+                    onChange={handleInputChange}
+                    min="10"
+                    max="3600"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="批次间隔时间"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">每批发送完成后等待的固定时间</p>
+                </div>
+              )}
+            </div>
+            
+            {/* 时间限制 */}
+            <div className="mt-6">
+              <div className="flex items-center mb-4">
+                <input
+                  type="checkbox"
+                  name="enableTimeLimit"
+                  checked={formData.enableTimeLimit}
+                  onChange={handleInputChange}
+                  className="mr-2"
+                />
+                <label className="text-sm font-medium text-gray-700">
+                  启用发送时间限制
+                </label>
+              </div>
+              
+              {formData.enableTimeLimit && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      开始时间
+                    </label>
+                    <input
+                      type="time"
+                      name="sendStartTime"
+                      value={formData.sendStartTime}
+                      onChange={handleInputChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      结束时间
+                    </label>
+                    <input
+                      type="time"
+                      name="sendEndTime"
+                      value={formData.sendEndTime}
+                      onChange={handleInputChange}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {formData.enableTimeLimit && (
+                <p className="text-xs text-gray-500 mt-2 ml-6">
+                  只在指定时间段内发送邮件，超出时间段将暂停发送
+                </p>
+              )}
+            </div>
+            
+            {/* 邮箱测试 */}
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">邮箱连通性测试</h3>
+              <div className="flex items-center space-x-4">
+                <button
+                  type="button"
+                  onClick={() => testEmailConnection()}
+                  disabled={!formData.emailProfileId || testing}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                >
+                  {testing ? '测试中...' : '测试邮箱连接'}
+                </button>
+                <span className="text-sm text-gray-600">
+                  发送测试邮件验证邮箱配置是否正确
+                </span>
+              </div>
+              {testResult && (
+                <div className={`mt-3 p-3 rounded-md ${
+                  testResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                }`}>
+                  <div className="whitespace-pre-line">
+                    {testResult.message}
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex justify-end space-x-4">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={
+                creating || 
+                !formData.name || 
+                !formData.templateId || 
+                !formData.emailProfileId ||
+                (formData.recipientSource === 'recipientList' && !formData.recipientListId) ||
+                (formData.recipientSource === 'excelUpload' && !formData.excelUploadId)
+              }
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              {creating ? '创建中...' : '创建活动'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}

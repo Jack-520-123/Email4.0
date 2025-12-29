@@ -1,0 +1,451 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String           @id @default(uuid())
+  name                 String?
+  email                String?          @unique
+  emailVerified        DateTime?
+  image                String?
+  password             String?
+  role                 String           @default("user")
+  permissions          Json?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  status               String           @default("pending")
+  accounts             Account[]
+  campaigns            Campaign[]
+  emailProfiles        EmailProfile[]
+  assignedEmailReplies EmailReply[]     @relation("AssignedReplies")
+  emailReplies         EmailReply[]
+  excelUploads         ExcelUpload[]
+  greetings            Greeting[]
+  notifications        Notification[]
+  recipients           Recipient[]
+  recipientLists       RecipientList[]
+  sentEmails           SentEmail[]
+  sessions             Session[]
+  templates            Template[]
+  userProfiles         UserProfile[]
+  warmupCampaigns      WarmupCampaign[]
+}
+
+model Account {
+  id                String   @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailProfile {
+  id               String           @id @default(uuid())
+  userId           String
+  nickname         String
+  email            String
+  password         String
+  smtpServer       String
+  smtpPort         Int
+  emailType        String?
+  isDefault        Boolean          @default(false)
+  isSystemAdmin    Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  maxEmailsPerHour Int              @default(100)
+  randomInterval   Int              @default(3)
+  sendInterval     Int              @default(5)
+  enableMonitoring Boolean          @default(false)
+  imapPort         Int?
+  imapSecure       Boolean          @default(true)
+  imapServer       String?
+  campaigns        Campaign[]
+  user             User             @relation(fields: [userId], references: [id])
+  emailReplies     EmailReply[]
+  sentEmails       SentEmail[]
+  warmupCampaigns  WarmupCampaign[] @relation("EmailProfileToWarmupCampaign")
+}
+
+model EmailReply {
+  id             String       @id @default(uuid())
+  userId         String
+  emailProfileId String
+  sentEmailId    String?
+  from           String
+  to             String
+  subject        String
+  body           String
+  receivedAt     DateTime
+  threadId       String?
+  isNew          Boolean      @default(true)
+  tags           String[]     @default([])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  assignedUserId String?
+  parentReplyId  String?
+  lastReplyAt    DateTime?
+  assignedUser   User?        @relation("AssignedReplies", fields: [assignedUserId], references: [id])
+  emailProfile   EmailProfile @relation(fields: [emailProfileId], references: [id], onDelete: Cascade)
+  parentReply    EmailReply?  @relation("EmailReplyThreads", fields: [parentReplyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  childReplies   EmailReply[] @relation("EmailReplyThreads")
+  sentEmail      SentEmail?   @relation("SentEmailReplies", fields: [sentEmailId], references: [id])
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, receivedAt])
+  @@index([emailProfileId, receivedAt])
+  @@index([parentReplyId])
+}
+
+model Template {
+  id           String      @id @default(uuid())
+  userId       String
+  name         String
+  subject      String
+  htmlContent  String
+  isRichText   Boolean     @default(false)
+  templateData Json?
+  attachments  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  campaigns    Campaign[]
+  sentEmails   SentEmail[]
+  user         User        @relation(fields: [userId], references: [id])
+}
+
+model RecipientList {
+  id          String      @id @default(uuid())
+  userId      String
+  name        String
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  campaigns   Campaign[]
+  recipients  Recipient[]
+  user        User        @relation(fields: [userId], references: [id])
+}
+
+model Recipient {
+  id                String        @id @default(uuid())
+  userId            String
+  recipientListId   String
+  name              String
+  email             String
+  company           String?
+  sortOrder         Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  group             String?
+  emailStatus       EmailStatus   @default(UNKNOWN)
+  lastSentAt        DateTime?
+  lastFailureReason String?
+  successCount      Int           @default(0)
+  failureCount      Int           @default(0)
+  bounceCount       Int           @default(0)
+  isBlacklisted     Boolean       @default(false)
+  website           String?
+  emailJobs         EmailJob[]
+  recipientList     RecipientList @relation(fields: [recipientListId], references: [id], onDelete: Cascade)
+  user              User          @relation(fields: [userId], references: [id])
+  sentEmails        SentEmail[]
+}
+
+model ExcelUpload {
+  id               String     @id @default(uuid())
+  userId           String
+  fileName         String
+  originalName     String
+  filePath         String?
+  totalRecords     Int
+  processedRecords Int        @default(0)
+  status           String     @default("pending")
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  data             Json?
+  campaigns        Campaign[]
+  user             User       @relation(fields: [userId], references: [id])
+}
+
+model WarmupCampaign {
+  id            String         @id @default(uuid())
+  name          String
+  userId        String
+  minSendDelay  Int            @default(2)
+  maxSendDelay  Int            @default(30)
+  status        String         @default("active")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id])
+  logs          WarmupLog[]
+  emailProfiles EmailProfile[] @relation("EmailProfileToWarmupCampaign")
+}
+
+model WarmupEmail {
+  id        String   @id @default(uuid())
+  subject   String
+  body      String
+  category  String   @default("general")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WarmupLog {
+  id               String         @id @default(uuid())
+  warmupCampaignId String
+  fromEmail        String
+  toEmail          String
+  subject          String
+  body             String
+  sentAt           DateTime       @default(now())
+  status           String
+  error            String?
+  campaign         WarmupCampaign @relation(fields: [warmupCampaignId], references: [id], onDelete: Cascade)
+}
+
+model EmailJob {
+  id             String         @id @default(uuid())
+  campaignId     String
+  recipientId    String
+  recipientEmail String
+  status         EmailJobStatus @default(PENDING)
+  attempts       Int            @default(0)
+  lastAttemptAt  DateTime?
+  errorMessage   String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  campaign       Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipient      Recipient      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([status, lastAttemptAt])
+}
+
+model Campaign {
+  id                   String         @id @default(uuid())
+  userId               String
+  templateId           String
+  emailProfileId       String
+  excelUploadId        String?
+  name                 String
+  totalRecipients      Int            @default(0)
+  sentCount            Int            @default(0)
+  deliveredCount       Int            @default(0)
+  openedCount          Int            @default(0)
+  clickedCount         Int            @default(0)
+  failedCount          Int            @default(0)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  scheduledAt          DateTime?
+  completedAt          DateTime?
+  recipientListId      String?
+  enableTimeLimit      Boolean        @default(false)
+  isPaused             Boolean        @default(false)
+  lastSentAt           DateTime?
+  sendEndTime          String?
+  sendStartTime        String?
+  enableRandomInterval Boolean        @default(false)
+  randomIntervalMax    Int            @default(120)
+  randomIntervalMin    Int            @default(60)
+  status               CampaignStatus @default(DRAFT)
+  errorMessage         String?
+  groupSelectionMode   String?
+  recipientSource      String?
+  selectedGroups       Json?
+  isStopped            Boolean        @default(false)
+  isArchived           Boolean        @default(false)
+  lastProcessedIndex   Int            @default(0)
+  recoveryStatus       String?
+  recoveryToken        String?        @unique
+  recoveryExpiresAt    DateTime?
+  sendImmediately      Boolean        @default(true)
+  emailProfile         EmailProfile   @relation(fields: [emailProfileId], references: [id])
+  excelUpload          ExcelUpload?   @relation(fields: [excelUploadId], references: [id])
+  recipientList        RecipientList? @relation(fields: [recipientListId], references: [id])
+  template             Template       @relation(fields: [templateId], references: [id])
+  user                 User           @relation(fields: [userId], references: [id])
+  logs                 CampaignLog[]
+  emailJobs            EmailJob[]
+  sentEmails           SentEmail[]
+
+  @@index([userId, status])
+  @@index([emailProfileId])
+}
+
+model SentEmail {
+  id             String            @id @default(uuid())
+  userId         String
+  templateId     String?
+  emailProfileId String
+  recipientId    String?
+  campaignId     String
+  recipientEmail String
+  recipientName  String?
+  subject        String
+  body           String
+  status         String
+  sentAt         DateTime          @default(now())
+  deliveredAt    DateTime?
+  openedAt       DateTime?
+  clickedAt      DateTime?
+  bouncedAt      DateTime?
+  errorMessage   String?
+  messageId      String?
+  replies        EmailReply[]      @relation("SentEmailReplies")
+  campaign       Campaign          @relation(fields: [campaignId], references: [id])
+  emailProfile   EmailProfile      @relation(fields: [emailProfileId], references: [id])
+  recipient      Recipient?        @relation(fields: [recipientId], references: [id])
+  template       Template?         @relation(fields: [templateId], references: [id])
+  user           User              @relation(fields: [userId], references: [id])
+  interactions   UserInteraction[]
+
+  @@unique([campaignId, recipientEmail], name: "unique_campaign_recipient")
+  @@index([campaignId, status])
+  @@index([userId, campaignId])
+  @@index([sentAt])
+}
+
+model CampaignLog {
+  id         String   @id @default(uuid())
+  campaignId String
+  level      String
+  message    String
+  details    Json?
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model Greeting {
+  id        String   @id @default(uuid())
+  userId    String?
+  content   String
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserProfile {
+  id                  String            @id @default(uuid())
+  userId              String
+  recipientEmail      String            @unique
+  recipientName       String?
+  company             String?
+  position            String?
+  industry            String?
+  location            String?
+  totalEmailsReceived Int               @default(0)
+  totalEmailsOpened   Int               @default(0)
+  totalEmailsClicked  Int               @default(0)
+  totalReplies        Int               @default(0)
+  openRate            Float             @default(0.0)
+  clickRate           Float             @default(0.0)
+  replyRate           Float             @default(0.0)
+  engagementScore     Float             @default(0.0)
+  preferredEmailTime  String?
+  preferredTopics     String[]          @default([])
+  deviceType          String?
+  tags                String[]          @default([])
+  firstContactAt      DateTime?
+  lastActivityAt      DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  interactions        UserInteraction[]
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, recipientEmail])
+  @@index([engagementScore])
+}
+
+model UserInteraction {
+  id            String          @id @default(uuid())
+  userProfileId String
+  sentEmailId   String?
+  type          InteractionType
+  details       Json?
+  userAgent     String?
+  ipAddress     String?
+  deviceType    String?
+  location      String?
+  timestamp     DateTime        @default(now())
+  sentEmail     SentEmail?      @relation(fields: [sentEmailId], references: [id])
+  userProfile   UserProfile     @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userProfileId, timestamp])
+  @@index([type, timestamp])
+}
+
+enum EmailJobStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SENDING
+  PAUSED
+  STOPPED
+  COMPLETED
+  FAILED
+  SCHEDULED
+}
+
+enum EmailStatus {
+  UNKNOWN
+  SUCCESS
+  FAILED
+  BOUNCED
+  REJECTED
+  INVALID
+  BLACKLISTED
+}
+
+enum InteractionType {
+  EMAIL_SENT
+  EMAIL_OPENED
+  EMAIL_CLICKED
+  EMAIL_REPLIED
+  EMAIL_BOUNCED
+  EMAIL_UNSUBSCRIBED
+  LINK_CLICKED
+  ATTACHMENT_DOWNLOADED
+}

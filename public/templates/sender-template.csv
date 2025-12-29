@@ -1,0 +1,4 @@
+发件人姓名,邮箱地址,邮箱密码,SMTP服务器,SMTP端口,备注
+张三,zhangsan@qq.com,授权码123456,smtp.qq.com,587,QQ邮箱
+李四,lisi@163.com,授权码654321,smtp.163.com,465,163邮箱
+王五,wangwu@gmail.com,应用密码,smtp.gmail.com,587,Gmail邮箱

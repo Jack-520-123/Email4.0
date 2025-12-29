@@ -1,0 +1,76 @@
+/* 自定义Quill编辑器样式 */
+
+/* 占位符样式 */
+.ql-editor {
+  /* 确保占位符在编辑器中可见 */
+}
+
+/* 占位符高亮样式 */
+.ql-editor .placeholder {
+  background-color: #fef3c7;
+  color: #d97706;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+  border: 1px solid #fbbf24;
+}
+
+/* 占位符悬停效果 */
+.ql-editor .placeholder:hover {
+  background-color: #fde68a;
+  border-color: #f59e0b;
+}
+
+/* 确保占位符文本不被编辑器默认样式覆盖，并设置合理的段落间距 */
+.ql-editor p {
+  margin-bottom: 1em;
+}
+
+/* 占位符在预览模式下的样式 */
+.preview-content .placeholder {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+  border: 1px solid #38bdf8;
+}
+
+/* 修复Quill编辑器中的占位符显示问题 */
+.ql-editor span[style*="{{"]:not(.placeholder) {
+  background-color: #fef3c7 !important;
+  color: #d97706 !important;
+  padding: 2px 4px !important;
+  border-radius: 3px !important;
+  font-weight: 500 !important;
+  border: 1px solid #fbbf24 !important;
+}
+
+/* 确保占位符在富文本编辑器中正确显示 */
+.ql-editor *:not(.ql-ui) {
+  /* 重置可能影响占位符显示的样式 */
+}
+
+/* 占位符选中状态 */
+.ql-editor .ql-selected .placeholder {
+  background-color: #dbeafe;
+  border-color: #3b82f6;
+}
+
+/* 暗色主题下的占位符样式 */
+.dark .ql-editor .placeholder {
+  background-color: #451a03;
+  color: #fbbf24;
+  border-color: #92400e;
+}
+
+.dark .ql-editor .placeholder:hover {
+  background-color: #78350f;
+  border-color: #d97706;
+}
+
+.dark .preview-content .placeholder {
+  background-color: #0c4a6e;
+  color: #38bdf8;
+  border-color: #0284c7;
+}
