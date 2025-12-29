@@ -30,7 +30,7 @@ export default function BreadcrumbNav({
     const breadcrumbs = []
 
     // 添加主页
-    breadcrumbs.push({ name: '主页', href: '/' })
+    breadcrumbs.push({ name: '主页', href: '/dashboard' })
 
     // 根据路径生成面包屑
     let currentPath = ''

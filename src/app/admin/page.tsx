@@ -74,7 +74,7 @@ export default function AdminPage() {
 
   // 数据导出
   const [exportUserId, setExportUserId] = useState('')
-  const [exportType, setExportType] = useState<'templates' | 'email-profiles'>('templates')
+  const [exportType, setExportType] = useState<'templates' | 'email-profiles' | 'recipients'>('templates')
   const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json')
   const [exporting, setExporting] = useState(false)
 
@@ -918,6 +918,7 @@ export default function AdminPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="templates">邮件模板</SelectItem>
+                      <SelectItem value="recipients">收件人</SelectItem>
                       <SelectItem value="email-profiles">发件人配置</SelectItem>
                     </SelectContent>
                   </Select>

@@ -99,7 +99,7 @@ export default function DashboardPage() {
 
   const [recentActivity, setRecentActivity] = useState<Array<{ id: string | number, action: string, template?: string, count?: number, time: string, type?: string, status?: string, subject?: string }>>([])
   const [replyWords, setReplyWords] = useState([])
-  const [userProfileRadarData, setUserProfileRadarData] = useState([])
+
   const [statusTrend, setStatusTrend] = useState([])
   const [wordCloudData, setWordCloudData] = useState([])
   const [hourlyStats, setHourlyStats] = useState([])
@@ -143,17 +143,7 @@ export default function DashboardPage() {
       setWordCloudData(data.wordCloudData || [])
       setHourlyStats(data.hourlyStats || [])
 
-      // 获取用户画像雷达图数据
-      try {
-        const radarResponse = await fetch('/api/user-profiles/radar')
-        if (radarResponse.ok) {
-          const radarData = await radarResponse.json()
-          setUserProfileRadarData(radarData.data || [])
-        }
-      } catch (error) {
-        console.error('获取用户画像雷达图数据失败:', error)
-        setUserProfileRadarData([])
-      }
+
     } catch (error) {
       console.error('获取数据失败:', error)
       // 设置默认值
@@ -190,7 +180,7 @@ export default function DashboardPage() {
       setTemplateStats([])
       setRecentActivity([])
       setReplyWords([])
-      setUserProfileRadarData([])
+
       setStatusTrend([])
       setWordCloudData([])
       setHourlyStats([])
@@ -639,23 +629,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 用户画像雷达图 */}
-        {userProfileRadarData.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">用户画像分析</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={userProfileRadarData}>
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="subject" />
-                  <PolarRadiusAxis />
-                  <Radar name="用户画像" dataKey="A" stroke={CHART_COLORS.series[0]} fill={CHART_COLORS.series[0]} fillOpacity={0.6} />
-                  <Tooltip />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
+
 
         {/* 回复词云 */}
         {wordCloudData.length > 0 && (
