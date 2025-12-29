@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
                 id: true,
                 email: true,
                 name: true,
-                status: true,
+                emailStatus: true,
                 createdAt: true,
                 // recipientLists: { select: { name: true } } // If needed
             },
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
                 r.id,
                 r.email,
                 r.name || '',
-                r.status,
+                r.emailStatus,
                 format(new Date(r.createdAt), 'yyyy-MM-dd HH:mm:ss')
             ])
 
