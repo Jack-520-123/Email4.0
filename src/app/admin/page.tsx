@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-import { Users, Mail, Settings, TestTube, Plus, Edit, Trash2 } from 'lucide-react'
+import { Users, Mail, Settings, TestTube, Plus, Edit, Trash2, BarChart3, Download, Search, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav'
 
 interface User {
   id: string
@@ -55,6 +56,28 @@ export default function AdminPage() {
   const [testing, setTesting] = useState(false)
   const [assigningGreetings, setAssigningGreetings] = useState(false)
 
+  // 系统统计数据
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    pendingUsers: 0,
+    approvedUsers: 0,
+    disabledUsers: 0,
+    totalCampaigns: 0,
+    activeCampaigns: 0,
+    completedCampaigns: 0,
+    totalEmailsSent: 0
+  })
+
+  // 用户搜索和筛选
+  const [userSearch, setUserSearch] = useState('')
+  const [userFilter, setUserFilter] = useState<'all' | 'pending' | 'approved' | 'disabled'>('all')
+
+  // 数据导出
+  const [exportUserId, setExportUserId] = useState('')
+  const [exportType, setExportType] = useState<'templates' | 'email-profiles'>('templates')
+  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json')
+  const [exporting, setExporting] = useState(false)
+
   // 新邮箱配置表单
   const [newProfile, setNewProfile] = useState({
     nickname: '',
@@ -82,6 +105,18 @@ export default function AdminPage() {
       if (response.ok) {
         const data = await response.json()
         setUsers(data.users)
+
+        // 计算用户统计数据
+        const userStats = data.users.reduce((acc: any, user: User) => {
+          acc.totalUsers++
+          if (user.status === 'pending') acc.pendingUsers++
+          if (user.status === 'approved') acc.approvedUsers++
+          if (user.status === 'disabled') acc.disabledUsers++
+          acc.totalCampaigns += user._count.campaigns
+          return acc
+        }, { totalUsers: 0, pendingUsers: 0, approvedUsers: 0, disabledUsers: 0, totalCampaigns: 0 })
+
+        setStats(prev => ({ ...prev, ...userStats }))
       } else {
         toast.error('获取用户列表失败')
       }
@@ -136,8 +171,8 @@ export default function AdminPage() {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
-          userId, 
+        body: JSON.stringify({
+          userId,
           status
         })
       })
@@ -248,6 +283,61 @@ export default function AdminPage() {
     }
   }
 
+  // 数据导出处理
+  const handleExport = async () => {
+    if (!exportUserId) {
+      toast.error('请选择要导出的用户')
+      return
+    }
+
+    setExporting(true)
+    try {
+      const response = await fetch(`/api/admin/export/${exportType}?userId=${exportUserId}&format=${exportFormat}`)
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${exportType}_${exportUserId}.${exportFormat}`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        toast.success('导出成功')
+      } else {
+        const data = await response.json()
+        toast.error(data.error || '导出失败')
+      }
+    } catch (error) {
+      toast.error('导出失败')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // 批量审核通过
+  const batchApprove = async () => {
+    const pendingUserIds = users.filter(u => u.status === 'pending').map(u => u.id)
+    if (pendingUserIds.length === 0) {
+      toast.info('没有待审核的用户')
+      return
+    }
+
+    for (const userId of pendingUserIds) {
+      await updateUserStatus(userId, 'approved')
+    }
+    toast.success(`已批量审核通过 ${pendingUserIds.length} 个用户`)
+  }
+
+  // 过滤用户列表
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = !userSearch ||
+      user.name?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      user.email?.toLowerCase().includes(userSearch.toLowerCase())
+    const matchesFilter = userFilter === 'all' || user.status === userFilter
+    return matchesSearch && matchesFilter
+  })
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -261,13 +351,22 @@ export default function AdminPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">系统管理</h1>
-        <p className="text-gray-600">管理用户权限和系统邮箱配置</p>
+      <BreadcrumbNav
+        title="系统管理"
+        showBackButton={true}
+        showHomeButton={true}
+        customBackPath="/dashboard"
+      />
+      <div className="mb-6">
+        <p className="text-gray-600">管理用户权限、系统邮箱配置和数据导出</p>
       </div>
 
-      <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            系统概览
+          </TabsTrigger>
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             用户管理
@@ -280,7 +379,103 @@ export default function AdminPage() {
             <Settings className="h-4 w-4" />
             问候语管理
           </TabsTrigger>
+          <TabsTrigger value="export" className="flex items-center gap-2">
+            <Download className="h-4 w-4" />
+            数据导出
+          </TabsTrigger>
         </TabsList>
+
+        {/* 系统概览 Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">总用户数</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalUsers}</div>
+                <p className="text-xs text-muted-foreground">系统注册用户</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">待审核</CardTitle>
+                <Clock className="h-4 w-4 text-yellow-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-yellow-600">{stats.pendingUsers}</div>
+                <p className="text-xs text-muted-foreground">等待审核的用户</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">已启用</CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">{stats.approvedUsers}</div>
+                <p className="text-xs text-muted-foreground">正常使用的用户</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">已停用</CardTitle>
+                <XCircle className="h-4 w-4 text-red-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">{stats.disabledUsers}</div>
+                <p className="text-xs text-muted-foreground">被停用的用户</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>活动统计</CardTitle>
+              <CardDescription>邮件发送活动概览</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">{stats.totalCampaigns}</div>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">总活动数</p>
+                </div>
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">{emailProfiles.length}</div>
+                  <p className="text-sm text-green-700 dark:text-green-300">系统邮箱配置</p>
+                </div>
+                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">{users.reduce((sum, u) => sum + u._count.templates, 0)}</div>
+                  <p className="text-sm text-purple-700 dark:text-purple-300">用户模板总数</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {stats.pendingUsers > 0 && (
+            <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20">
+              <CardHeader>
+                <CardTitle className="text-yellow-800 dark:text-yellow-200">待处理事项</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-yellow-700 dark:text-yellow-300">
+                      有 <strong>{stats.pendingUsers}</strong> 个用户等待审核
+                    </p>
+                  </div>
+                  <Button onClick={batchApprove} className="bg-yellow-600 hover:bg-yellow-700">
+                    批量审核通过
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         <TabsContent value="users" className="space-y-6">
           <Card>
@@ -289,8 +484,42 @@ export default function AdminPage() {
               <CardDescription>管理系统用户和权限分配</CardDescription>
             </CardHeader>
             <CardContent>
+              {/* 搜索和筛选工具栏 */}
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="搜索用户名或邮箱..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select value={userFilter} onValueChange={(value: any) => setUserFilter(value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="筛选状态" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部用户</SelectItem>
+                    <SelectItem value="pending">待审核</SelectItem>
+                    <SelectItem value="approved">已启用</SelectItem>
+                    <SelectItem value="disabled">已停用</SelectItem>
+                  </SelectContent>
+                </Select>
+                {stats.pendingUsers > 0 && (
+                  <Button onClick={batchApprove} variant="outline" className="text-green-600">
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    批量审核通过 ({stats.pendingUsers})
+                  </Button>
+                )}
+              </div>
+
               <div className="space-y-4">
-                {users.map((user) => (
+                {filteredUsers.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    {userSearch || userFilter !== 'all' ? '没有找到匹配的用户' : '暂无用户'}
+                  </div>
+                ) : filteredUsers.map((user) => (
                   <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
@@ -299,13 +528,13 @@ export default function AdminPage() {
                           {user.role === 'admin' ? '管理员' : '普通用户'}
                         </Badge>
                         <Badge variant={
-                          user.status === 'approved' ? 'default' : 
-                          user.status === 'pending' ? 'secondary' : 
-                          user.status === 'disabled' ? 'outline' : 'destructive'
+                          user.status === 'approved' ? 'default' :
+                            user.status === 'pending' ? 'secondary' :
+                              user.status === 'disabled' ? 'outline' : 'destructive'
                         }>
-                          {user.status === 'approved' ? '已启用' : 
-                           user.status === 'pending' ? '待审核' : 
-                           user.status === 'disabled' ? '已停用' : '已拒绝'}
+                          {user.status === 'approved' ? '已启用' :
+                            user.status === 'pending' ? '待审核' :
+                              user.status === 'disabled' ? '已停用' : '已拒绝'}
                         </Badge>
                       </div>
                       <p className="text-sm text-gray-600 mb-2">{user.email}</p>
@@ -381,7 +610,7 @@ export default function AdminPage() {
                   <Label>用户角色</Label>
                   <Select
                     value={selectedUser.role}
-                    onValueChange={(value) => setSelectedUser({...selectedUser, role: value})}
+                    onValueChange={(value) => setSelectedUser({ ...selectedUser, role: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -392,7 +621,7 @@ export default function AdminPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div>
                   <Label>权限配置 (JSON格式)</Label>
                   <Textarea
@@ -400,7 +629,7 @@ export default function AdminPage() {
                     onChange={(e) => {
                       try {
                         const permissions = JSON.parse(e.target.value)
-                        setSelectedUser({...selectedUser, permissions})
+                        setSelectedUser({ ...selectedUser, permissions })
                       } catch (error) {
                         // 忽略JSON解析错误
                       }
@@ -409,7 +638,7 @@ export default function AdminPage() {
                     placeholder='例如: {"emailTypes": ["qq", "163", "gmail", "outlook", "hotmail", "yahoo", "sina", "sohu", "126", "foxmail", "aliyun", "work.weixin", "exmail.qq"], "maxCampaigns": 10}'
                   />
                 </div>
-                
+
                 <div className="flex gap-2">
                   <Button
                     onClick={() => updateUserPermissions(selectedUser.id, selectedUser.permissions, selectedUser.role)}
@@ -470,7 +699,7 @@ export default function AdminPage() {
                   </div>
                 ))}
               </div>
-              
+
               {emailProfiles.length > 0 && (
                 <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                   <Label className="text-sm font-medium mb-2 block">邮箱连通性测试</Label>
@@ -501,7 +730,7 @@ export default function AdminPage() {
                     <Label>配置名称</Label>
                     <Input
                       value={newProfile.nickname}
-                      onChange={(e) => setNewProfile({...newProfile, nickname: e.target.value})}
+                      onChange={(e) => setNewProfile({ ...newProfile, nickname: e.target.value })}
                       placeholder="例如: QQ邮箱配置"
                     />
                   </div>
@@ -509,19 +738,19 @@ export default function AdminPage() {
                     <Label>邮箱地址</Label>
                     <Input
                       value={newProfile.email}
-                      onChange={(e) => setNewProfile({...newProfile, email: e.target.value})}
+                      onChange={(e) => setNewProfile({ ...newProfile, email: e.target.value })}
                       placeholder="例如: admin@example.com"
                       type="email"
                     />
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>邮箱密码/授权码</Label>
                     <Input
                       value={newProfile.password}
-                      onChange={(e) => setNewProfile({...newProfile, password: e.target.value})}
+                      onChange={(e) => setNewProfile({ ...newProfile, password: e.target.value })}
                       placeholder="邮箱密码或授权码"
                       type="password"
                     />
@@ -530,7 +759,7 @@ export default function AdminPage() {
                     <Label>邮箱类型</Label>
                     <Select
                       value={newProfile.emailType}
-                      onValueChange={(value) => setNewProfile({...newProfile, emailType: value})}
+                      onValueChange={(value) => setNewProfile({ ...newProfile, emailType: value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="选择邮箱类型" />
@@ -545,13 +774,13 @@ export default function AdminPage() {
                     </Select>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>SMTP服务器</Label>
                     <Input
                       value={newProfile.smtpServer}
-              onChange={(e) => setNewProfile({...newProfile, smtpServer: e.target.value})}
+                      onChange={(e) => setNewProfile({ ...newProfile, smtpServer: e.target.value })}
                       placeholder="例如: smtp.qq.com"
                     />
                   </div>
@@ -559,21 +788,21 @@ export default function AdminPage() {
                     <Label>SMTP端口</Label>
                     <Input
                       value={newProfile.smtpPort}
-                      onChange={(e) => setNewProfile({...newProfile, smtpPort: e.target.value})}
+                      onChange={(e) => setNewProfile({ ...newProfile, smtpPort: e.target.value })}
                       placeholder="例如: 587"
                       type="number"
                     />
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <Switch
                     checked={newProfile.isDefault}
-                    onCheckedChange={(checked) => setNewProfile({...newProfile, isDefault: checked})}
+                    onCheckedChange={(checked) => setNewProfile({ ...newProfile, isDefault: checked })}
                   />
                   <Label>设为默认配置</Label>
                 </div>
-                
+
                 <div className="flex gap-2">
                   <Button onClick={createEmailProfile}>
                     创建配置
@@ -603,7 +832,7 @@ export default function AdminPage() {
                   <li>• 用户可以在问候语管理页面自定义和管理自己的问候语</li>
                 </ul>
               </div>
-              
+
               <div className="bg-yellow-50 p-4 rounded-lg dark:bg-yellow-900/20">
                 <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">注意事项</h3>
                 <ul className="text-sm text-yellow-700 dark:text-yellow-400 space-y-1">
@@ -618,7 +847,7 @@ export default function AdminPage() {
                   <h3 className="font-medium mb-1">批量分配默认问候语</h3>
                   <p className="text-sm text-gray-600">为所有现有用户分配20条默认问候语</p>
                 </div>
-                <Button 
+                <Button
                   onClick={assignDefaultGreetings}
                   disabled={assigningGreetings}
                   className="bg-green-600 hover:bg-green-700"
@@ -642,6 +871,93 @@ export default function AdminPage() {
                   <div>• Greetings! Hope you find this helpful.</div>
                 </div>
                 <p className="mt-2">...以及另外10条问候语</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 数据导出 Tab */}
+        <TabsContent value="export" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>数据导出</CardTitle>
+              <CardDescription>导出用户的邮件模板和发件人配置数据</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-blue-50 p-4 rounded-lg dark:bg-blue-900/20">
+                <h3 className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">功能说明</h3>
+                <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1">
+                  <li>• 选择要导出的用户和数据类型</li>
+                  <li>• 支持 JSON 和 CSV 两种导出格式</li>
+                  <li>• 导出的邮箱密码会进行脱敏处理</li>
+                </ul>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label className="mb-2 block">选择用户</Label>
+                  <Select value={exportUserId} onValueChange={setExportUserId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择用户" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name || user.email} ({user._count.templates} 模板, {user._count.emailProfiles} 邮箱)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="mb-2 block">导出类型</Label>
+                  <Select value={exportType} onValueChange={(value: any) => setExportType(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="templates">邮件模板</SelectItem>
+                      <SelectItem value="email-profiles">发件人配置</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="mb-2 block">导出格式</Label>
+                  <Select value={exportFormat} onValueChange={(value: any) => setExportFormat(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="json">JSON 格式</SelectItem>
+                      <SelectItem value="csv">CSV 格式</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleExport}
+                  disabled={!exportUserId || exporting}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {exporting ? '导出中...' : '开始导出'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>导出记录</CardTitle>
+              <CardDescription>最近的数据导出操作记录</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-gray-500">
+                暂无导出记录
               </div>
             </CardContent>
           </Card>

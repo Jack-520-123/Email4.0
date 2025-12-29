@@ -10,6 +10,7 @@ interface BreadcrumbNavProps {
   showHomeButton?: boolean
   customBackPath?: string
   className?: string
+  action?: React.ReactNode
 }
 
 export default function BreadcrumbNav({
@@ -17,7 +18,8 @@ export default function BreadcrumbNav({
   showBackButton = true,
   showHomeButton = true,
   customBackPath,
-  className = ''
+  className = '',
+  action
 }: BreadcrumbNavProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -72,11 +74,28 @@ export default function BreadcrumbNav({
 
   const breadcrumbs = generateBreadcrumbs()
 
+  // 计算智能返回路径（当浏览器历史不可用时使用）
+  const getSmartBackPath = () => {
+    const paths = pathname.split('/').filter(Boolean)
+    if (paths.length <= 1) {
+      return '/dashboard' // 如果只有一级路径，返回仪表板
+    }
+    // 返回上一级路径
+    return '/' + paths.slice(0, -1).join('/')
+  }
+
   const handleBack = () => {
     if (customBackPath) {
       router.push(customBackPath)
     } else {
-      router.back()
+      // 检查是否有浏览器历史记录
+      // 注意：window.history.length 在新标签页或直接访问时可能为1或2
+      if (typeof window !== 'undefined' && window.history.length > 2) {
+        router.back()
+      } else {
+        // 没有历史记录时，使用智能路径
+        router.push(getSmartBackPath())
+      }
     }
   }
 
@@ -107,6 +126,12 @@ export default function BreadcrumbNav({
 
       {/* 右侧：操作按钮 */}
       <div className="flex items-center space-x-3">
+        {action && (
+          <div className="flex items-center">
+            {action}
+          </div>
+        )}
+
         {showHomeButton && (
           <Link
             href="/dashboard"
@@ -142,22 +167,27 @@ export function SimpleBreadcrumb({
   className?: string
 }) {
   const router = useRouter()
+  const pathname = usePathname()
 
   const handleBack = () => {
     if (backPath) {
       router.push(backPath)
     } else {
-      router.back()
+      // 计算智能返回路径
+      const paths = pathname.split('/').filter(Boolean)
+      const smartBackPath = paths.length <= 1 ? '/dashboard' : '/' + paths.slice(0, -1).join('/')
+
+      if (typeof window !== 'undefined' && window.history.length > 2) {
+        router.back()
+      } else {
+        router.push(smartBackPath)
+      }
     }
   }
 
   return (
     <div className={`flex items-center justify-between mb-6 ${className}`}>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        {title}
-      </h1>
-
-      <div className="flex items-center space-x-3">
+      <div className="flex items-center gap-2">
         <Link
           href="/dashboard"
           className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors"
@@ -174,6 +204,7 @@ export function SimpleBreadcrumb({
           返回上级
         </button>
       </div>
+
     </div>
   )
 }

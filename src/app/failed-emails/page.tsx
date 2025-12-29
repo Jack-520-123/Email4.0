@@ -36,6 +36,7 @@ import {
 import { toast } from 'sonner'
 import { Search, Trash2, Ban, CheckCircle, RefreshCw } from 'lucide-react'
 import { EmailStatus } from '@prisma/client'
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav'
 
 interface FailedEmail {
   id: string
@@ -144,17 +145,17 @@ export default function FailedEmailsPage() {
   const fetchFailedEmails = async () => {
     // 简化会话检查 - 不强制要求登录
     if (status === 'loading') return
-    
+
     try {
       setLoading(true)
       const params = new URLSearchParams()
       Object.entries(filters).forEach(([key, value]) => {
         if (value) params.append(key, value.toString())
       })
-      
+
       const response = await fetch(`/api/failed-emails?${params}`)
       const result = await response.json()
-      
+
       if (result.success) {
         setData(result.data)
       } else {
@@ -215,7 +216,7 @@ export default function FailedEmailsPage() {
       })
 
       const result = await response.json()
-      
+
       if (result.success) {
         toast.success(result.message || '操作完成')
         setSelectedEmails([])
@@ -279,6 +280,12 @@ export default function FailedEmailsPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <BreadcrumbNav
+        title="失败邮箱管理"
+        showBackButton={true}
+        showHomeButton={true}
+        customBackPath="/dashboard"
+      />
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">失败邮箱管理</h1>
         <Button onClick={fetchFailedEmails} disabled={loading}>
@@ -479,7 +486,7 @@ export default function FailedEmailsPage() {
                       <TableCell>
                         <Checkbox
                           checked={selectedEmails.includes(email.id)}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             handleSelectEmail(email.id, email.recipient.id, checked as boolean)
                           }
                         />

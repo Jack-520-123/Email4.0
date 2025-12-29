@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Wrench, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav'
 
 interface DiagnosticResult {
   name: string
@@ -215,15 +216,13 @@ export default function DebugPage() {
 
   return (
     <div className="container mx-auto p-6">
+      <BreadcrumbNav
+        title="系统诊断"
+        showBackButton={true}
+        showHomeButton={true}
+        customBackPath="/dashboard"
+      />
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-2">
-          <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">
-            首页
-          </Link>
-          <span className="text-sm text-muted-foreground">&gt;</span>
-          <span className="text-sm font-medium">系统诊断</span>
-        </div>
-        <h1 className="text-3xl font-bold">系统诊断</h1>
         <p className="text-muted-foreground">检查系统各项功能的运行状态</p>
       </div>
 
@@ -235,8 +234,8 @@ export default function DebugPage() {
                 <CardTitle>诊断结果</CardTitle>
                 <CardDescription>系统各项功能的运行状态检查</CardDescription>
               </div>
-              <Button 
-                onClick={runDiagnostics} 
+              <Button
+                onClick={runDiagnostics}
                 disabled={loading}
                 size="sm"
               >
@@ -377,7 +376,7 @@ export default function DebugPage() {
                   <br />4. 尝试刷新页面或清除浏览器缓存
                 </AlertDescription>
               </Alert>
-              
+
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
@@ -388,7 +387,7 @@ export default function DebugPage() {
                   <br />4. 查看详细错误日志获取更多信息
                 </AlertDescription>
               </Alert>
-              
+
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>

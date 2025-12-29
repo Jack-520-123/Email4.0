@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { RefreshCw, Play, Square, Settings, Mail, Clock, CheckCircle, AlertCircle, Home, ChevronRight } from 'lucide-react';
+import { RefreshCw, Play, Square, Settings, Mail, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav';
 import { toast } from 'sonner';
 
 interface EmailProfile {
@@ -84,7 +85,7 @@ export default function EmailMonitorPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           action,
           ...(selectedProfiles.length > 0 ? { profileIds: selectedProfiles } : {})
         }),
@@ -129,15 +130,13 @@ export default function EmailMonitorPage() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* 面包屑导航 */}
-      <nav className="flex items-center space-x-2 text-sm text-muted-foreground">
-        <Link href="/dashboard" className="flex items-center hover:text-foreground transition-colors">
-          <Home className="h-4 w-4 mr-1" />
-          仪表盘
-        </Link>
-        <ChevronRight className="h-4 w-4" />
-        <span className="text-foreground">邮件监听</span>
-      </nav>
-      
+      <BreadcrumbNav
+        title="邮件监听"
+        showBackButton={true}
+        showHomeButton={true}
+        customBackPath="/dashboard"
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">邮件监听服务</h1>
@@ -168,7 +167,7 @@ export default function EmailMonitorPage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${status?.monitor.isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
-                <Badge 
+                <Badge
                   variant={status?.monitor.isRunning ? 'default' : 'secondary'}
                   className={`${status?.monitor.isRunning ? 'bg-green-500 text-white' : 'bg-gray-500 text-white'} text-sm font-medium`}
                 >
@@ -185,7 +184,7 @@ export default function EmailMonitorPage() {
                 </span>
               )}
             </div>
-            
+
             <div className="flex gap-2">
               {status?.monitor.isRunning ? (
                 <>
@@ -234,7 +233,7 @@ export default function EmailMonitorPage() {
                     <div key={monitor.profileId} className="border rounded-lg p-3 text-xs">
                       <div className="font-medium truncate mb-1" title={profile?.email}>{profile?.email || '未知配置'}</div>
                       <div className="flex items-center gap-2">
-                        <Badge 
+                        <Badge
                           variant={monitor.status === 'running' ? 'default' : 'destructive'}
                           className={`${monitor.status === 'running' ? 'bg-green-600' : 'bg-red-600'} text-white`}
                         >
@@ -300,7 +299,7 @@ export default function EmailMonitorPage() {
               </div>
             </div>
           </div>
-          
+
           {status?.configuration.emailProfiles && status.configuration.emailProfiles.length > 0 ? (
             <div className="space-y-4">
               {/* 批量选择操作 */}
@@ -329,24 +328,22 @@ export default function EmailMonitorPage() {
                   已选择 {selectedProfiles.length} 个配置
                 </span>
               </div>
-              
+
               {/* 发件人配置列表 */}
               <div className="space-y-3">
                 {status.configuration.emailProfiles.map((profile) => {
                   const isSelected = selectedProfiles.includes(profile.id);
                   const canSelect = profile.enableMonitoring && profile.imapServer;
-                  
+
                   return (
-                    <div 
-                      key={profile.id} 
-                      className={`border rounded-lg p-3 transition-colors ${
-                        isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                      } ${
-                        canSelect ? 'cursor-pointer hover:border-gray-300' : 'opacity-60'
-                      }`}
+                    <div
+                      key={profile.id}
+                      className={`border rounded-lg p-3 transition-colors ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                        } ${canSelect ? 'cursor-pointer hover:border-gray-300' : 'opacity-60'
+                        }`}
                       onClick={() => {
                         if (!canSelect) return;
-                        
+
                         if (isSelected) {
                           setSelectedProfiles(prev => prev.filter(id => id !== profile.id));
                         } else {
@@ -361,7 +358,7 @@ export default function EmailMonitorPage() {
                               type="checkbox"
                               checked={isSelected}
                               disabled={!canSelect}
-                              onChange={() => {}} // 由父元素的onClick处理
+                              onChange={() => { }} // 由父元素的onClick处理
                               className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                             />
                             <Mail className="h-4 w-4 text-muted-foreground" />
@@ -379,7 +376,7 @@ export default function EmailMonitorPage() {
                               已选择
                             </Badge>
                           )}
-                          <Badge 
+                          <Badge
                             variant={profile.enableMonitoring ? 'default' : 'secondary'}
                             className={profile.enableMonitoring ? 'bg-green-500' : 'bg-gray-500'}
                           >
@@ -427,9 +424,9 @@ export default function EmailMonitorPage() {
               <li>• 自动记录邮件的基础信息</li>
             </ul>
           </div>
-          
+
           <Separator />
-          
+
           <div>
             <h4 className="font-medium mb-2">配置说明</h4>
             <p className="text-sm text-muted-foreground">

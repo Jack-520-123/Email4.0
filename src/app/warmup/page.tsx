@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/use-toast';
+
 import Link from 'next/link';
-import { Home, ChevronRight, Eye, X } from 'lucide-react';
+import { Eye, X } from 'lucide-react';
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav';
 
 interface EmailProfile {
   id: string;
@@ -42,13 +44,13 @@ export default function WarmupPage() {
   const [emailProfiles, setEmailProfiles] = useState<EmailProfile[]>([]);
   const [campaigns, setCampaigns] = useState<WarmupCampaign[]>([]);
   const [loading, setLoading] = useState(false);
-  
+
   // 实时日志相关状态
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [realTimeLogs, setRealTimeLogs] = useState<WarmupLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
-  
+
   // 新建预热活动的表单状态
   const [formData, setFormData] = useState({
     name: '',
@@ -91,7 +93,7 @@ export default function WarmupPage() {
   // 创建新的预热活动
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.selectedEmails.length < 2) {
       toast({
         title: "错误",
@@ -121,7 +123,7 @@ export default function WarmupPage() {
           title: "成功",
           description: "预热活动创建成功",
         });
-        
+
         // 重置表单
         setFormData({
           name: '',
@@ -129,7 +131,7 @@ export default function WarmupPage() {
           minSendDelay: 2,
           maxSendDelay: 30
         });
-        
+
         // 刷新列表
         fetchCampaigns();
       } else {
@@ -352,15 +354,13 @@ export default function WarmupPage() {
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* 面包屑导航 */}
-      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
-        <Link href="/dashboard" className="flex items-center hover:text-gray-900 dark:hover:text-white transition-colors">
-          <Home className="w-4 h-4 mr-1" />
-          仪表盘
-        </Link>
-        <ChevronRight className="w-4 h-4" />
-        <span className="text-gray-900 dark:text-white font-medium">邮件预热</span>
-      </div>
-      
+      <BreadcrumbNav
+        title="邮件预热"
+        showBackButton={true}
+        showHomeButton={true}
+        customBackPath="/dashboard"
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>创建邮件预热活动</CardTitle>
@@ -588,18 +588,16 @@ export default function WarmupPage() {
                   {realTimeLogs.map((log) => (
                     <div
                       key={log.id}
-                      className={`p-4 rounded-lg border ${
-                        log.status === 'success'
-                          ? 'bg-green-50 border-green-200'
-                          : 'bg-red-50 border-red-200'
-                      }`}
+                      className={`p-4 rounded-lg border ${log.status === 'success'
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-red-50 border-red-200'
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`inline-block w-2 h-2 rounded-full ${
-                              log.status === 'success' ? 'bg-green-500' : 'bg-red-500'
-                            }`}
+                            className={`inline-block w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500'
+                              }`}
                           ></span>
                           <span className="font-medium">
                             {log.status === 'success' ? '发送成功' : '发送失败'}

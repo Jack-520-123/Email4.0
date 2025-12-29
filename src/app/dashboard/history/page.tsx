@@ -17,6 +17,7 @@ import {
   Download
 } from 'lucide-react'
 import { getStatusColor } from '@/config/colors'
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav'
 
 interface EmailHistory {
   id: string
@@ -109,13 +110,13 @@ export default function HistoryPage() {
 
   // 过滤历史记录
   const filteredHistory = history.filter(item => {
-    const matchesSearch = 
+    const matchesSearch =
       item.templateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.recipientListName.toLowerCase().includes(searchTerm.toLowerCase())
-    
+
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter
-    
+
     return matchesSearch && matchesStatus
   })
 
@@ -132,10 +133,10 @@ export default function HistoryPage() {
       clicked: { color: getStatusColor('clicked'), icon: CheckCircle, text: '已点击' },
       bounced: { color: getStatusColor('bounced'), icon: XCircle, text: '退回' }
     }
-    
+
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending
     const Icon = config.icon
-    
+
     return (
       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${config.color}`}>
         <Icon className="mr-1 h-3 w-3" />
@@ -171,16 +172,21 @@ export default function HistoryPage() {
   return (
     <div className="space-y-6">
       {/* 头部 */}
-      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">发送历史</h1>
-        <button
-          onClick={fetchHistory}
-          className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          刷新
-        </button>
-      </div>
+      <BreadcrumbNav
+        title="发送历史"
+        showBackButton={true}
+        showHomeButton={true}
+        customBackPath="/dashboard"
+        action={
+          <button
+            onClick={fetchHistory}
+            className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            刷新
+          </button>
+        }
+      />
 
       {/* 搜索和过滤 */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -317,7 +323,7 @@ export default function HistoryPage() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-screen items-end justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowDetails(false)} />
-            
+
             <div className="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-4xl sm:align-middle">
               <div className="bg-white px-4 pt-5 pb-4 dark:bg-gray-800 sm:p-6 sm:pb-4">
                 <div className="flex items-center justify-between mb-4">
@@ -331,7 +337,7 @@ export default function HistoryPage() {
                     <XCircle className="h-6 w-6" />
                   </button>
                 </div>
-                
+
                 {/* 统计概览 */}
                 <div className="grid grid-cols-2 gap-4 mb-6 sm:grid-cols-4">
                   <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-700">
@@ -359,7 +365,7 @@ export default function HistoryPage() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* 详细列表 */}
                 <div className="max-h-96 overflow-y-auto">
                   {detailsLoading ? (
@@ -396,8 +402,8 @@ export default function HistoryPage() {
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                               {detail.openedAt ? new Date(detail.openedAt).toLocaleString('zh-CN') :
-                               detail.deliveredAt ? new Date(detail.deliveredAt).toLocaleString('zh-CN') :
-                               new Date(detail.sentAt).toLocaleString('zh-CN')}
+                                detail.deliveredAt ? new Date(detail.deliveredAt).toLocaleString('zh-CN') :
+                                  new Date(detail.sentAt).toLocaleString('zh-CN')}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                               {detail.errorMessage || '-'}
@@ -409,7 +415,7 @@ export default function HistoryPage() {
                   )}
                 </div>
               </div>
-              
+
               <div className="bg-gray-50 px-4 py-3 dark:bg-gray-700 sm:flex sm:flex-row-reverse sm:px-6">
                 <button
                   onClick={() => setShowDetails(false)}

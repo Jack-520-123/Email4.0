@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Edit, Trash2, Star, StarOff, Home, ChevronRight } from 'lucide-react'
+import { Plus, Edit, Trash2, Star, StarOff } from 'lucide-react'
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav'
 
 interface Greeting {
   id: string
@@ -166,15 +167,13 @@ export default function GreetingsPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* 面包屑导航 */}
-        <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
-          <Link href="/dashboard" className="flex items-center hover:text-gray-900 dark:hover:text-white transition-colors">
-            <Home className="w-4 h-4 mr-1" />
-            仪表盘
-          </Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-gray-900 dark:text-white font-medium">问候语管理</span>
-        </div>
-        
+        <BreadcrumbNav
+          title="问候语管理"
+          showBackButton={true}
+          showHomeButton={true}
+          customBackPath="/dashboard"
+        />
+
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
@@ -246,11 +245,10 @@ export default function GreetingsPage() {
               {greetings.map((greeting) => (
                 <div
                   key={greeting.id}
-                  className={`p-4 border rounded-lg ${
-                    greeting.isActive
+                  className={`p-4 border rounded-lg ${greeting.isActive
                       ? 'border-green-200 bg-green-50 dark:border-green-700 dark:bg-green-900/20'
                       : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
@@ -296,11 +294,10 @@ export default function GreetingsPage() {
                     <div className="flex items-center space-x-2 ml-4">
                       <button
                         onClick={() => handleToggleActive(greeting.id, greeting.isActive)}
-                        className={`p-2 rounded-md ${
-                          greeting.isActive
+                        className={`p-2 rounded-md ${greeting.isActive
                             ? 'text-green-600 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-900'
                             : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        }`}
+                          }`}
                         title={greeting.isActive ? '点击禁用' : '点击激活'}
                       >
                         {greeting.isActive ? <Star className="h-5 w-5" /> : <StarOff className="h-5 w-5" />}

@@ -9,9 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Trash2, Plus, Download, Send, Home, ChevronRight } from 'lucide-react';
+import { Trash2, Plus, Download, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import BreadcrumbNav from '@/components/ui/breadcrumb-nav';
 
 interface EmailProvider {
   id: string;
@@ -72,7 +73,7 @@ export default function SenderConfigPage() {
   const [senderProfiles, setSenderProfiles] = useState<SenderProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  
+
   // 新增发件人表单
   const [newSender, setNewSender] = useState({
     nickname: '',
@@ -88,7 +89,7 @@ export default function SenderConfigPage() {
 
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
   const [editPassword, setEditPassword] = useState('');
-  
+
   // 自定义提供商表单
   const [customProvider, setCustomProvider] = useState({
     name: '',
@@ -156,26 +157,26 @@ export default function SenderConfigPage() {
 
   const handleEmailChange = (email: string) => {
     setNewSender({ ...newSender, email })
-    
+
     const detected = detectEmailProvider(email)
     setAutoDetectedProvider(detected)
-    
+
     if (detected) {
       // 查找是否已有匹配的提供商
-      const existingProvider = providers.find(p => 
+      const existingProvider = providers.find(p =>
         p.smtpServer === detected.smtpServer && p.smtpPort === detected.smtpPort
       )
-      
+
       if (existingProvider) {
-        setNewSender(prev => ({ 
-          ...prev, 
+        setNewSender(prev => ({
+          ...prev,
           providerId: existingProvider.id,
           imapServer: detected.imapServer,
           imapPort: detected.imapPort
         }))
       } else {
         // 如果没有匹配的提供商，也自动填充IMAP信息
-        setNewSender(prev => ({ 
+        setNewSender(prev => ({
           ...prev,
           imapServer: detected.imapServer,
           imapPort: detected.imapPort
@@ -218,10 +219,10 @@ export default function SenderConfigPage() {
 
       if (response.ok) {
         toast.success('发件人配置添加成功');
-        setNewSender({ 
-          nickname: '', 
-          email: '', 
-          password: '', 
+        setNewSender({
+          nickname: '',
+          email: '',
+          password: '',
           providerId: '',
           imapServer: '',
           imapPort: 993,
@@ -245,14 +246,14 @@ export default function SenderConfigPage() {
     // 找到要删除的配置信息
     const profile = senderProfiles.find(p => p.id === id);
     const profileInfo = profile ? `${profile.nickname} (${profile.email})` : '该发件人配置';
-    
+
     if (!confirm(`确定要删除 ${profileInfo} 吗？\n\n⚠️ 警告：删除操作将同时删除：\n• 该发件人的所有历史活动\n• 相关的已发送邮件记录\n• 所有统计数据\n\n删除后将无法恢复，请谨慎操作！`)) {
       return;
     }
 
     try {
       console.log(`开始删除发件人配置: ID=${id}`);
-      
+
       const response = await fetch(`/api/sender-profiles/${id}`, {
         method: 'DELETE',
       });
@@ -288,7 +289,7 @@ export default function SenderConfigPage() {
 
     // 添加到发送中状态
     setTestingEmails(prev => new Set([...prev, profile.id]));
-    
+
     try {
       toast.info(`正在发送测试邮件到 ${testEmail}...`, {
         duration: 2000,
@@ -344,9 +345,9 @@ export default function SenderConfigPage() {
         toast.error('获取配置信息失败');
         return;
       }
-      
+
       const currentProfile = await getResponse.json();
-      
+
       // 更新密码
       const response = await fetch(`/api/sender-profiles/${id}`, {
         method: 'PUT',
@@ -449,18 +450,15 @@ export default function SenderConfigPage() {
   return (
     <div className="container mx-auto p-6">
       {/* 面包屑导航 */}
-      <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
-        <Link href="/dashboard" className="flex items-center hover:text-foreground transition-colors">
-          <Home className="w-4 h-4 mr-1" />
-          仪表盘
-        </Link>
-        <ChevronRight className="w-4 h-4" />
-        <span className="text-foreground font-medium">发件人配置管理</span>
-      </div>
-      
+      <BreadcrumbNav
+        title="发件人配置管理"
+        showBackButton={true}
+        showHomeButton={true}
+        customBackPath="/dashboard"
+      />
+
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">发件人配置管理</h1>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-muted-foreground">
           管理您的邮箱发件人配置，支持多种邮箱服务商
         </p>
       </div>
@@ -585,9 +583,9 @@ export default function SenderConfigPage() {
                   </Select>
                   {autoDetectedProvider && !providers.find(p => p.smtpServer === autoDetectedProvider.smtpServer) && (
                     <div className="mt-2">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
+                      <Button
+                        type="button"
+                        variant="outline"
                         size="sm"
                         onClick={() => {
                           setCustomProvider({
@@ -603,7 +601,7 @@ export default function SenderConfigPage() {
                     </div>
                   )}
                 </div>
-                
+
                 {/* IMAP配置 */}
                 <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
                   <div className="flex items-center justify-between">
@@ -619,7 +617,7 @@ export default function SenderConfigPage() {
                       <Label htmlFor="enableMonitoring" className="text-sm">启用邮件监听</Label>
                     </div>
                   </div>
-                  
+
                   {newSender.enableMonitoring && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -688,7 +686,7 @@ export default function SenderConfigPage() {
                           </div>
                           {profile.enableMonitoring && profile.imapServer && (
                             <div className="text-xs text-muted-foreground">
-                              IMAP: {profile.imapServer}:{profile.imapPort} 
+                              IMAP: {profile.imapServer}:{profile.imapPort}
                               <span className="ml-2 px-1 py-0.5 bg-green-100 text-green-800 rounded text-xs">
                                 监听已启用
                               </span>
@@ -701,7 +699,7 @@ export default function SenderConfigPage() {
                               </span>
                             </div>
                           )}
-                          
+
                           {/* 授权码显示和编辑 */}
                           <div className="mt-2">
                             <div className="text-xs text-muted-foreground mb-1">授权码:</div>
