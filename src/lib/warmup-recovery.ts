@@ -70,12 +70,14 @@ if (!global.warmupTasks) {
 }
 
 // 全局预热轮询状态管理
-if (!global.warmupRotationState) {
-  global.warmupRotationState = new Map();
+const globalAny = global as any;
+
+if (!globalAny.warmupRotationState) {
+  globalAny.warmupRotationState = new Map();
 }
 
-const warmupTasks = global.warmupTasks;
-const warmupRotationState = global.warmupRotationState;
+const warmupTasks = globalAny.warmupTasks;
+const warmupRotationState = globalAny.warmupRotationState;
 
 // 打乱数组的工具函数
 const shuffleArray = <T>(array: T[]): T[] => {
@@ -214,7 +216,7 @@ export class WarmupRecoveryService {
       // 停止所有运行中的预热任务
       const runningTaskIds = Array.from(warmupTasks.keys());
       for (const campaignId of runningTaskIds) {
-        await this.stopWarmupCampaign(campaignId);
+        await this.stopWarmupCampaign(campaignId as string);
       }
       
       // 清理所有状态
@@ -444,8 +446,8 @@ export class WarmupRecoveryService {
   }
 
   // 获取运行中的任务
-  getRunningTasks() {
-    return Array.from(warmupTasks.entries()).map(([id, task]) => ({
+  getRunningTasks(): any[] {
+    return (Array.from(warmupTasks.entries()) as any[]).map(([id, task]) => ({
       campaignId: id,
       ...task
     }));

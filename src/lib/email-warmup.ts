@@ -1449,103 +1449,7 @@ function initWarmupMetadata(count: number): WarmupMetadata {
     };
 }
 
-export async function processWarmupCampaign(campaignId: string) {
-    try {
-        const campaign = await prisma.warmupCampaign.findUnique({
-            where: { id: campaignId },
-            include: { emailProfiles: true }
-        });
-
-        if (!campaign || campaign.status !== 'active') return;
-
-        // Check if it's time to run (Stateless Scheduling)
-        if (campaign.nextRunAt && new Date(campaign.nextRunAt) > new Date()) {
-            return;
-        }
-
-        const emailProfiles = campaign.emailProfiles;
-        if (emailProfiles.length < 2) {
-            console.error(`[Warmup] Campaign ${campaignId} needs at least 2 email profiles`);
-            return;
-        }
-
-        // Initialize or load metadata state
-        let metadata: WarmupMetadata;
-        if (campaign.metadata) {
-            metadata = campaign.metadata as any;
-            if (!metadata.pairs || !metadata.usedEmailIndices) {
-                metadata = initWarmupMetadata(emailProfiles.length);
-            }
-        } else {
-            metadata = initWarmupMetadata(emailProfiles.length);
-        }
-
-        // Rotation Logic
-        if (metadata.pairs.length === 0) {
-            metadata = initWarmupMetadata(emailProfiles.length);
-        }
-
-        if (metadata.currentIndex >= metadata.pairs.length) {
-            metadata.pairs = shuffleArray(metadata.pairs);
-            metadata.currentIndex = 0;
-            console.log(`[Warmup] Campaign ${campaignId} starting new rotation cycle`);
-        }
-
-        const currentPairIndices = metadata.pairs[metadata.currentIndex];
-        metadata.currentIndex++;
-
-        if (currentPairIndices) {
-            const fromProfile = emailProfiles[currentPairIndices.fromIndex];
-            const toProfile = emailProfiles[currentPairIndices.toIndex];
-
-            if (fromProfile && toProfile) {
-                const pair: WarmupPair = { from: fromProfile, to: toProfile };
-                console.log(`[Warmup] Processing ${fromProfile.email} -> ${toProfile.email}`);
-
-                // Content Logic
-                const warmupEmails = await prisma.warmupEmail.findMany();
-                if (warmupEmails.length > 0) {
-                    let availableIndices = warmupEmails.map((_, idx) => idx)
-                        .filter(idx => !metadata.usedEmailIndices.includes(idx));
-
-                    if (availableIndices.length === 0) {
-                        metadata.usedEmailIndices = [];
-                        availableIndices = warmupEmails.map((_, idx) => idx);
-                    }
-
-                    const randomIdx = Math.floor(Math.random() * availableIndices.length);
-                    const emailIndex = availableIndices[randomIdx];
-                    const randomEmail = warmupEmails[emailIndex];
-
-                    if (randomEmail) {
-                        metadata.usedEmailIndices.push(emailIndex);
-                        // Send Email
-                        await sendWarmupEmail(campaign.id, pair, randomEmail);
-                    }
-                }
-            }
-        }
-
-        // Schedule Next Run
-        // crypto.randomInt max is exclusive, so +1
-        const minDelay = campaign.minSendDelay || 2;
-        const maxDelay = campaign.maxSendDelay || 30;
-        const nextDelayMinutes = randomInt(minDelay, maxDelay + 1);
-        const nextRunAt = new Date(Date.now() + nextDelayMinutes * 60 * 1000);
-
-        // Save State
-        await prisma.warmupCampaign.update({
-            where: { id: campaignId },
-            data: {
-                metadata: metadata as any,
-                nextRunAt: nextRunAt
-            }
-        });
-
-    } catch (error) {
-        console.error('Failed to process warmup campaign:', error);
-    }
-}
+const usedEmailIndices = new Set<number>();
 
 const getUniqueRandomEmailIndex = (max: number) => {
     if (usedEmailIndices.size >= max) {
@@ -1562,11 +1466,13 @@ const getUniqueRandomEmailIndex = (max: number) => {
 };
 
 // 全局轮询状态管理
-if (!global.warmupRotationState) {
-    global.warmupRotationState = new Map();
+const globalAny = global as any;
+
+if (!globalAny.warmupRotationState) {
+    globalAny.warmupRotationState = new Map();
 }
 
-const warmupRotationState = global.warmupRotationState;
+const warmupRotationState = globalAny.warmupRotationState;
 
 // 初始化或获取轮询状态
 function getRotationState(campaignId: string, emailProfiles: any[]) {
